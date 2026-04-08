@@ -545,14 +545,27 @@
         }
 
         @keyframes pulse-green {
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2) }
-            70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0) }
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0) }
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2)
+            }
+
+            70% {
+                box-shadow: 0 0 0 20px rgba(16, 185, 129, 0)
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0)
+            }
         }
 
         @keyframes scale-in {
-            0% { transform: scale(0) }
-            100% { transform: scale(1) }
+            0% {
+                transform: scale(0)
+            }
+
+            100% {
+                transform: scale(1)
+            }
         }
 
         .details-box {
@@ -627,7 +640,9 @@
         }
 
         @keyframes spin {
-            100% { transform: rotate(360deg); }
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         /* ── Retry banner ── */
@@ -681,7 +696,8 @@
             <h2 style="margin-bottom:10px;">Security Verification</h2>
             <p class="subtitle" style="margin-bottom:5px;">Enter the OTP sent to your registered email.</p>
             <p style="color:#a855f7;font-size:0.85rem;margin-bottom:25px;">(Hint: For prototyping, use
-                <strong>1234</strong>)</p>
+                <strong>1234</strong>)
+            </p>
             <form id="otpForm">
                 <div class="form-group">
                     <input type="text" id="otpInput" placeholder="Enter 4-digit OTP" required maxlength="4"
@@ -777,7 +793,8 @@
         // ══════════════════════════════════════════════
 
         const RELAYS = [
-            'https://relay.peer.ooo/gun'
+            'https://relay.peer.ooo/gun',
+            'https://gunjs.fly.dev/gun'
             // Add your own relay URL here for redundancy:
             // 'https://your-relay.koyeb.app/gun'
         ];
@@ -920,7 +937,7 @@
                     state.slots = JSON.parse(e.newValue);
                     const onSlots = document.getElementById('step2').classList.contains('active-view');
                     if (onSlots) renderSlots();
-                } catch(err) {}
+                } catch (err) { }
             }
         });
 
@@ -1056,6 +1073,8 @@
                 document.getElementById('otpError').style.display = 'none';
                 loader.style.display = 'flex';
                 loadSlots(() => {
+                    subscribeToLiveUpdates();
+
                     setTimeout(() => {
                         loader.style.display = 'none';
                         otpView.classList.remove('active-view');
