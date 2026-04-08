@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncSpace - Premium Room Booking</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- GUN.js loaded from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bg-shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            animation: float 10s infinite alternate;
+        }
+
+        .shape1 {
+            width: 40vw;
+            height: 40vw;
+            background: rgba(99, 102, 241, 0.4);
+            top: -10%;
+            left: -10%;
+        }
+
+        .shape2 {
+            width: 35vw;
+            height: 35vw;
+            background: rgba(168, 85, 247, 0.4);
+            bottom: -10%;
+            right: -10%;
+            animation-delay: -5s;
+        }
+
+        .shape3 {
+            width: 20vw;
+            height: 20vw;
+            background: rgba(236, 72, 153, 0.3);
+            top: 40%;
+            left: 40%;
+            animation-delay: -2s;
+            animation-duration: 15s;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            100% {
+                transform: translate(50px, 50px) scale(1.1);
+            }
+        }
+
+        /* ── Sync status bar ── */
+        #syncBar {
+            position: fixed;
+            top: 16px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 30px;
+            padding: 8px 16px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            backdrop-filter: blur(12px);
+            transition: all 0.4s ease;
+        }
+
+        #syncDot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f59e0b;
+            transition: background 0.4s;
+        }
+
+        #syncBar.connected #syncDot {
+            background: #10b981;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        #syncBar.error #syncDot {
+            background: #ef4444;
+        }
+
+        #syncLabel {
+            color: #94a3b8;
+        }
+
+        @keyframes pulse-dot {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+            }
+
+            70% {
+                box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        /* ── Relay badge ── */
+        #relayBadge {
+            position: fixed;
+            top: 52px;
+            right: 20px;
+            z-index: 100;
+            font-size: 0.7rem;
+            color: #475569;
+            text-align: right;
+            transition: color 0.4s;
+        }
+
+        /* ── Container ── */
+        .container {
+            position: relative;
+            z-index: 1;
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px;
+            width: 90%;
+            max-width: 450px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .container.expanded {
+            max-width: 800px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+            background: linear-gradient(135deg, #a855f7, #6366f1, #3b82f6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+            animation: gradient-shift 5s ease infinite;
+            background-size: 200% 200%;
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 30px;
+            font-weight: 300;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+            margin-bottom: 8px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 14px 16px;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        input:focus {
+            border-color: #a855f7;
+            box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.15), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        input.input-error {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15) !important;
+        }
+
+        .field-error {
+            color: #ef4444;
+            font-size: 0.8rem;
+            margin-top: 6px;
+            display: none;
+        }
+
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-top: 15px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 20px -10px rgba(168, 85, 247, 0.5);
+        }
+
+        button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transform: skewX(-20deg);
+            transition: all 0.5s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px -10px rgba(168, 85, 247, 0.7);
+        }
+
+        button:hover::after {
+            left: 150%;
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* ── Toast notification ── */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #f8fafc;
+            padding: 14px 24px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 340px;
+            white-space: nowrap;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        #toast.toast-success .toast-icon {
+            color: #10b981;
+        }
+
+        #toast.toast-error .toast-icon {
+            color: #ef4444;
+        }
+
+        #toast.toast-warn .toast-icon {
+            color: #f59e0b;
+        }
+
+        #toast.toast-info .toast-icon {
+            color: #6366f1;
+        }
+
+        .toast-icon {
+            font-size: 1.2rem;
+        }
+
+        /* ── Views ── */
+        #step1,
+        #step2,
+        #step3,
+        #otpView {
+            transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        #step2,
+        #step3,
+        #otpView {
+            display: none;
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            width: calc(100% - 80px);
+        }
+
+        .active-view {
+            display: block !important;
+            opacity: 1 !important;
+            transform: translateY(0) scale(1) !important;
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+        }
+
+        /* ── User greeting ── */
+        .user-greeting {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-right: 15px;
+            box-shadow: 0 4px 10px rgba(168, 85, 247, 0.3);
+        }
+
+        .greeting-text h2 {
+            font-size: 1.3rem;
+            margin-bottom: 2px;
+        }
+
+        .greeting-text p {
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        /* ── Slots ── */
+        .slots-container-wrapper {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .slots-container-wrapper::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .slots-container-wrapper::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .slots-container-wrapper::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        .slots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+        }
+
+        .slot-card {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slot-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .slot-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #6366f1, #a855f7);
+            transform: scaleX(0);
+            transition: transform 0.3s;
+            transform-origin: left;
+        }
+
+        .slot-card:hover {
+            border-color: rgba(168, 85, 247, 0.4);
+            transform: translateY(-4px);
+            background: rgba(30, 41, 59, 0.8);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .slot-card:hover::before {
+            opacity: 1;
+        }
+
+        .slot-card:hover::after {
+            transform: scaleX(1);
+        }
+
+        .slot-time {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 5px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slot-status {
+            font-size: 0.85rem;
+            color: #10b981;
+            font-weight: 500;
+            position: relative;
+            z-index: 1;
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 20px;
+        }
+
+        .slot-card.booked {
+            background: rgba(15, 23, 42, 0.4);
+            border-color: rgba(255, 255, 255, 0.02);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .slot-card.booked .slot-status {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .slot-card.booked::before,
+        .slot-card.booked::after {
+            display: none;
+        }
+
+        .slot-card.booked:hover {
+            border-color: rgba(255, 255, 255, 0.02);
+            transform: none;
+        }
+
+        /* ── Success ── */
+        .success-content {
+            text-align: center;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 20px;
+            color: #10b981;
+            font-size: 2.5rem;
+            box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.05);
+            animation: pulse-green 2s infinite, scale-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes pulse-green {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2)
+            }
+
+            70% {
+                box-shadow: 0 0 0 20px rgba(16, 185, 129, 0)
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0)
+            }
+        }
+
+        @keyframes scale-in {
+            0% {
+                transform: scale(0)
+            }
+
+            100% {
+                transform: scale(1)
+            }
+        }
+
+        .details-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 30px 0;
+            text-align: left;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .details-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: #10b981;
+        }
+
+        .details-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 12px;
+        }
+
+        .details-row:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .details-label {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .details-value {
+            font-weight: 500;
+            color: #f8fafc;
+            font-size: 1.05rem;
+        }
+
+        /* ── Loader ── */
+        .loader {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 10;
+            border-radius: 24px;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(168, 85, 247, 0.3);
+            border-radius: 50%;
+            border-top-color: #a855f7;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── Retry banner ── */
+        #retryBanner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(239, 68, 68, 0.15);
+            border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            font-size: 0.82rem;
+            text-align: center;
+            padding: 8px;
+            z-index: 300;
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Retry banner -->
+    <div id="retryBanner">⚠️ Peer relay unreachable — trying fallback relays… <span id="retryCount"></span></div>
+
+    <!-- Sync status -->
+    <div id="syncBar">
+        <div id="syncDot"></div>
+        <span id="syncLabel">Connecting…</span>
+    </div>
+    <div id="relayBadge">—</div>
+
+    <!-- Toast -->
+    <div id="toast"><span class="toast-icon" id="toastIcon">ℹ</span><span id="toastMsg">…</span></div>
+
+    <!-- Background -->
+    <div class="bg-shape shape1"></div>
+    <div class="bg-shape shape2"></div>
+    <div class="bg-shape shape3"></div>
+
+    <div class="container" id="mainContainer">
+        <div class="loader" id="loader">
+            <div class="spinner"></div>
+            <p>Processing…</p>
+        </div>
+
+        <!-- OTP View -->
+        <div id="otpView"
+            style="display:none;opacity:0;position:absolute;top:40px;left:40px;width:calc(100% - 80px);text-align:center;">
+            <h2 style="margin-bottom:10px;">Security Verification</h2>
+            <p class="subtitle" style="margin-bottom:5px;">Enter the OTP sent to your registered email.</p>
+            <p style="color:#a855f7;font-size:0.85rem;margin-bottom:25px;">(Hint: For prototyping, use
+                <strong>1234</strong>)</p>
+            <form id="otpForm">
+                <div class="form-group">
+                    <input type="text" id="otpInput" placeholder="Enter 4-digit OTP" required maxlength="4"
+                        style="text-align:center;font-size:1.5rem;letter-spacing:5px;">
+                </div>
+                <div id="otpError"
+                    style="color:#ef4444;font-size:0.85rem;margin-top:-10px;margin-bottom:15px;display:none;">
+                    Invalid OTP. Please try again.
+                </div>
+                <button type="submit" id="otpSubmitBtn">Verify &amp; Continue</button>
+                <button type="button" id="cancelOtpBtn"
+                    style="background:rgba(255,255,255,0.1);box-shadow:none;border:1px solid rgba(255,255,255,0.2);">Cancel</button>
+            </form>
+        </div>
+
+        <!-- Step 1: User Details -->
+        <div id="step1" class="active-view">
+            <h1>SyncSpace</h1>
+            <p class="subtitle">Elevate your meetings. Book your premium workspace.</p>
+            <form id="loginForm" novalidate>
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" placeholder="E.g. Elon Musk" autocomplete="name">
+                    <div class="field-error" id="nameErr">Please enter your full name.</div>
+                </div>
+                <div class="form-group">
+                    <label for="email">Work Email</label>
+                    <input type="email" id="email" placeholder="elon@tesla.com" autocomplete="email">
+                    <div class="field-error" id="emailErr">Please enter a valid email address.</div>
+                </div>
+                <div class="form-group">
+                    <label for="company">Company Name</label>
+                    <input type="text" id="company" placeholder="Tesla Inc." autocomplete="organization">
+                    <div class="field-error" id="companyErr">Please enter your company name.</div>
+                </div>
+                <button type="submit" id="submitBtn">View Available Slots</button>
+            </form>
+        </div>
+
+        <!-- Step 2: Slot Selection -->
+        <div id="step2">
+            <div class="user-greeting">
+                <div class="avatar" id="userInitials"></div>
+                <div class="greeting-text">
+                    <h2 id="greetName"></h2>
+                    <p id="greetCompany"></p>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;">
+                <div>
+                    <h3 style="font-weight:600;font-size:1.2rem;color:#f8fafc;">Available Slots</h3>
+                    <p style="color:#94a3b8;font-size:0.9rem;margin-top:4px;">Executive Boardroom Alpha</p>
+                </div>
+                <div style="background:rgba(255,255,255,0.1);padding:6px 12px;border-radius:8px;font-size:0.85rem;"
+                    id="dateLabel"></div>
+            </div>
+            <div class="slots-container-wrapper">
+                <div class="slots-grid" id="slotsContainer"></div>
+            </div>
+        </div>
+
+        <!-- Step 3: Success -->
+        <div id="step3">
+            <div class="success-content">
+                <div class="success-icon">✓</div>
+                <h2 style="font-size:2rem;color:#f8fafc;margin-bottom:5px;">Slot Booked!</h2>
+                <p class="subtitle" style="margin-top:5px;">Your workspace is ready and reserved.</p>
+                <div class="details-box">
+                    <div class="details-row"><span class="details-label">Booked By</span><span class="details-value"
+                            id="confirmName"></span></div>
+                    <div class="details-row"><span class="details-label">Organization</span><span class="details-value"
+                            id="confirmCompany"></span></div>
+                    <div class="details-row"><span class="details-label">Reserved Time</span><span class="details-value"
+                            id="confirmTime" style="color:#a855f7;"></span></div>
+                    <div class="details-row"><span class="details-label">Location</span><span
+                            class="details-value">Executive Boardroom Alpha</span></div>
+                </div>
+                <button id="bookAnotherBtn"
+                    style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);box-shadow:none;margin-top:5px;">Book
+                    Another Slot</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ══════════════════════════════════════════════
+        //  GUN.js — 5 community relay peers with fallback
+        // ══════════════════════════════════════════════
+        const RELAYS = [
+            'https://gun-manhattan.herokuapp.com/gun',
+            'https://gunjs.herokuapp.com/gun',
+            'https://peer.wallie.io/gun',
+            'https://relay.peer.ooo/gun',
+            'https://gun-us.herokuapp.com/gun'
+        ];
+
+        const gun = Gun({ peers: RELAYS, localStorage: true, radisk: false });
+        const slotsRef = gun.get('syncspace_v2').get('boardroom_alpha');
+
+        // ── Relay health monitoring ──
+        let activeRelay = 'Connecting…';
+        let relayFailures = 0;
+        const MAX_RELAY_FAILURES = 3;
+
+        function updateSyncUI(state, label, relay) {
+            const bar = document.getElementById('syncBar');
+            const lbl = document.getElementById('syncLabel');
+            const badge = document.getElementById('relayBadge');
+            bar.className = state;
+            lbl.textContent = label;
+            if (relay) {
+                const short = relay.replace('https://', '').replace('/gun', '');
+                badge.textContent = '↔ ' + short;
+                activeRelay = short;
+            }
+        }
+
+        // Detect connectivity via a Gun heartbeat (any ack = connected)
+        function checkRelayConnectivity() {
+            const probe = gun.get('syncspace_heartbeat').get('ping');
+            const ts = Date.now();
+            let heard = false;
+
+            probe.put({ ts }, ack => {
+                if (!heard) {
+                    heard = true;
+                    relayFailures = 0;
+                    updateSyncUI('connected', 'Live', RELAYS[0]);
+                    document.getElementById('retryBanner').style.display = 'none';
+                }
+            });
+
+            setTimeout(() => {
+                if (!heard) {
+                    relayFailures++;
+                    const remaining = RELAYS.length - relayFailures;
+                    updateSyncUI('error', 'Reconnecting…', null);
+                    if (relayFailures <= MAX_RELAY_FAILURES) {
+                        document.getElementById('retryBanner').style.display = 'block';
+                        document.getElementById('retryCount').textContent =
+                            `(trying relay ${relayFailures + 1}/${RELAYS.length})`;
+                    }
+                }
+            }, 4000);
+        }
+
+        checkRelayConnectivity();
+        setInterval(checkRelayConnectivity, 15000);
+
+        // ══════════════════════════════════════════════
+        //  Toast
+        // ══════════════════════════════════════════════
+        let toastTimer = null;
+        function showToast(msg, type = 'info') {
+            const icons = { success: '✓', error: '✕', warn: '⚠', info: 'ℹ' };
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            document.getElementById('toastIcon').textContent = icons[type] || 'ℹ';
+            toast.className = `show toast-${type}`;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { toast.className = ''; }, 3500);
+        }
+
+        // ══════════════════════════════════════════════
+        //  Default slots
+        // ══════════════════════════════════════════════
+        const DEFAULT_SLOTS = [
+            { id: 1, time: '09:00 AM', available: true, bookedBy: null, company: null },
+            { id: 2, time: '10:00 AM', available: true, bookedBy: null, company: null },
+            { id: 3, time: '11:00 AM', available: false, bookedBy: 'System', company: 'Maintenance' },
+            { id: 4, time: '12:00 PM', available: true, bookedBy: null, company: null },
+            { id: 5, time: '01:00 PM', available: true, bookedBy: null, company: null },
+            { id: 6, time: '02:00 PM', available: false, bookedBy: 'System', company: 'Maintenance' },
+            { id: 7, time: '03:00 PM', available: true, bookedBy: null, company: null },
+            { id: 8, time: '04:00 PM', available: true, bookedBy: null, company: null },
+            { id: 9, time: '05:00 PM', available: true, bookedBy: null, company: null }
+        ];
+
+        // ── App state ──
+        const state = { user: { name: '', email: '', company: '' }, slots: [] };
+
+        // ── Local cache key ──
+        const LOCAL_KEY = 'syncspace_gun_slots';
+
+        // ── Load slots from GUN (with localStorage fallback) ──
+        function loadSlots(callback) {
+            const cached = localStorage.getItem(LOCAL_KEY);
+            if (cached) {
+                try { state.slots = JSON.parse(cached); } catch (e) { state.slots = [...DEFAULT_SLOTS]; }
+            } else {
+                state.slots = [...DEFAULT_SLOTS];
+            }
+            if (callback) callback();
+
+            // Hydrate each slot node from GUN
+            DEFAULT_SLOTS.forEach(def => {
+                slotsRef.get('slot_' + def.id).once(data => {
+                    if (data && data.id) {
+                        const idx = state.slots.findIndex(s => s.id === data.id);
+                        const merged = {
+                            id: data.id,
+                            time: data.time || def.time,
+                            available: data.available !== undefined ? data.available : def.available,
+                            bookedBy: data.bookedBy || null,
+                            company: data.company || null
+                        };
+                        if (idx !== -1) state.slots[idx] = merged;
+                        else state.slots.push(merged);
+                        localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
+                        renderSlots();
+                    }
+                });
+            });
+        }
+
+        // ── Subscribe to live GUN updates ──
+        function subscribeToLiveUpdates() {
+            DEFAULT_SLOTS.forEach(def => {
+                slotsRef.get('slot_' + def.id).on(data => {
+                    if (!data || !data.id) return;
+                    const idx = state.slots.findIndex(s => s.id === data.id);
+                    const updated = {
+                        id: data.id, time: data.time || def.time,
+                        available: data.available !== undefined ? data.available : true,
+                        bookedBy: data.bookedBy || null, company: data.company || null
+                    };
+                    if (idx !== -1) {
+                        const was = state.slots[idx].available;
+                        state.slots[idx] = updated;
+                        if (was && !updated.available) {
+                            showToast(`${updated.time} was just booked by ${updated.bookedBy}`, 'warn');
+                        }
+                    } else { state.slots.push(updated); }
+
+                    localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
+                    const onSlots = document.getElementById('step2').classList.contains('active-view');
+                    if (onSlots) renderSlots();
+                });
+            });
+        }
+
+        // ── DOM refs ──
+        const step1 = document.getElementById('step1');
+        const step2 = document.getElementById('step2');
+        const step3 = document.getElementById('step3');
+        const otpView = document.getElementById('otpView');
+        const container = document.getElementById('mainContainer');
+        const loader = document.getElementById('loader');
+
+        // ── Date label ──
+        document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('en-GB', {
+            weekday: 'short', day: 'numeric', month: 'short'
+        });
+
+        // ══════════════════════════════════════════════
+        //  Form validation helpers
+        // ══════════════════════════════════════════════
+        function setFieldError(inputId, errId, show) {
+            const inp = document.getElementById(inputId);
+            const err = document.getElementById(errId);
+            if (show) { inp.classList.add('input-error'); err.style.display = 'block'; }
+            else { inp.classList.remove('input-error'); err.style.display = 'none'; }
+        }
+
+        function validateEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+
+        function validateForm() {
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const company = document.getElementById('company').value.trim();
+            let ok = true;
+
+            if (!name || name.length < 2) { setFieldError('name', 'nameErr', true); ok = false; }
+            else setFieldError('name', 'nameErr', false);
+
+            if (!validateEmail(email)) { setFieldError('email', 'emailErr', true); ok = false; }
+            else setFieldError('email', 'emailErr', false);
+
+            if (!company || company.length < 2) { setFieldError('company', 'companyErr', true); ok = false; }
+            else setFieldError('company', 'companyErr', false);
+
+            return ok;
+        }
+
+        // clear errors on input
+        ['name', 'email', 'company'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                const errMap = { name: 'nameErr', email: 'emailErr', company: 'companyErr' };
+                setFieldError(id, errMap[id], false);
+            });
+        });
+
+        // ══════════════════════════════════════════════
+        //  Step 1 → OTP
+        // ══════════════════════════════════════════════
+        document.getElementById('loginForm').addEventListener('submit', e => {
+            e.preventDefault();
+            if (!validateForm()) {
+                showToast('Please fix the errors above.', 'error');
+                return;
+            }
+
+            loader.style.display = 'flex';
+            setTimeout(() => {
+                state.user.name = document.getElementById('name').value.trim();
+                state.user.email = document.getElementById('email').value.trim();
+                state.user.company = document.getElementById('company').value.trim();
+
+                const names = state.user.name.split(' ');
+                const initials = names.length > 1
+                    ? (names[0][0] + names[names.length - 1][0])
+                    : names[0].substring(0, 2);
+                document.getElementById('userInitials').textContent = initials.toUpperCase();
+                document.getElementById('greetName').textContent = `Welcome, ${names[0]}`;
+                document.getElementById('greetCompany').textContent = state.user.company;
+
+                loader.style.display = 'none';
+                step1.classList.remove('active-view');
+
+                setTimeout(() => {
+                    step1.style.display = 'none';
+                    otpView.style.display = 'block';
+                    void otpView.offsetWidth;
+                    otpView.classList.add('active-view');
+                    document.getElementById('otpInput').value = '';
+                    document.getElementById('otpError').style.display = 'none';
+                    document.getElementById('otpInput').focus();
+                }, 500);
+            }, 800);
+        });
+
+        // ══════════════════════════════════════════════
+        //  OTP verification
+        // ══════════════════════════════════════════════
+        document.getElementById('otpForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const entered = document.getElementById('otpInput').value.trim();
+
+            if (entered.length !== 4 || !/^\d{4}$/.test(entered)) {
+                document.getElementById('otpError').textContent = 'OTP must be 4 digits.';
+                document.getElementById('otpError').style.display = 'block';
+                showToast('Enter a 4-digit OTP.', 'error');
+                return;
+            }
+
+            if (entered === '1234') {
+                document.getElementById('otpError').style.display = 'none';
+                loader.style.display = 'flex';
+
+                // Load fresh slot data before showing grid
+                loadSlots(() => {
+                    setTimeout(() => {
+                        loader.style.display = 'none';
+                        otpView.classList.remove('active-view');
+                        setTimeout(() => {
+                            otpView.style.display = 'none';
+                            renderSlots();
+                            step2.style.display = 'block';
+                            container.classList.add('expanded');
+                            void step2.offsetWidth;
+                            step2.classList.add('active-view');
+                            showToast('OTP verified! Select your slot.', 'success');
+                        }, 500);
+                    }, 600);
+                });
+            } else {
+                document.getElementById('otpError').textContent = 'Invalid OTP. Please try again.';
+                document.getElementById('otpError').style.display = 'block';
+                document.getElementById('otpInput').classList.add('input-error');
+                showToast('Incorrect OTP.', 'error');
+                setTimeout(() => document.getElementById('otpInput').classList.remove('input-error'), 1500);
+            }
+        });
+
+        document.getElementById('cancelOtpBtn').addEventListener('click', () => {
+            otpView.classList.remove('active-view');
+            setTimeout(() => {
+                otpView.style.display = 'none';
+                step1.style.display = 'block';
+                void step1.offsetWidth;
+                step1.classList.add('active-view');
+            }, 500);
+        });
+
+        // ══════════════════════════════════════════════
+        //  Render slots
+        // ══════════════════════════════════════════════
+        function renderSlots() {
+            const container = document.getElementById('slotsContainer');
+            container.innerHTML = '';
+            state.slots.forEach(slot => {
+                const card = document.createElement('div');
+                card.className = `slot-card ${slot.available ? '' : 'booked'}`;
+                const statusColor = slot.available ? '' : 'color:#ef4444;background:rgba(239,68,68,0.1)';
+                card.innerHTML = `
+            <div class="slot-time">${slot.time}</div>
+            <div class="slot-status" style="${statusColor}">${slot.available ? 'Available' : 'Booked'}</div>
+        `;
+                if (slot.available) card.addEventListener('click', () => handleBooking(slot));
+                container.appendChild(card);
+            });
+        }
+
+        // ══════════════════════════════════════════════
+        //  Book a slot — writes to GUN (all peers sync)
+        // ══════════════════════════════════════════════
+        function handleBooking(slot) {
+            // Optimistic check
+            const fresh = state.slots.find(s => s.id === slot.id);
+            if (!fresh || !fresh.available) {
+                showToast('This slot was just taken! Please pick another.', 'warn');
+                renderSlots();
+                return;
+            }
+
+            loader.style.display = 'flex';
+
+            const updatedSlot = {
+                id: slot.id,
+                time: slot.time,
+                available: false,
+                bookedBy: state.user.name,
+                company: state.user.company
+            };
+
+            // Write to GUN — all connected peers (phones, tablets, dashboard) receive this
+            slotsRef.get('slot_' + slot.id).put(updatedSlot, ack => {
+                if (ack.err) {
+                    // Gracefully fall back: still update local state and localStorage
+                    console.warn('GUN write error (using local fallback):', ack.err);
+                    showToast('Relay write failed — saved locally and will sync when back online.', 'warn');
+                }
+                // Update local state regardless
+                const idx = state.slots.findIndex(s => s.id === slot.id);
+                if (idx !== -1) state.slots[idx] = updatedSlot;
+                localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
+
+                document.getElementById('confirmName').textContent = state.user.name;
+                document.getElementById('confirmCompany').textContent = state.user.company;
+                document.getElementById('confirmTime').textContent = slot.time;
+
+                loader.style.display = 'none';
+                step2.classList.remove('active-view');
+                container.classList.remove('expanded');
+
+                setTimeout(() => {
+                    step2.style.display = 'none';
+                    step3.style.display = 'block';
+                    void step3.offsetWidth;
+                    step3.classList.add('active-view');
+                    showToast('Booking confirmed! 🎉', 'success');
+                }, 500);
+            });
+        }
+
+        // ══════════════════════════════════════════════
+        //  Book Another
+        // ══════════════════════════════════════════════
+        document.getElementById('bookAnotherBtn').addEventListener('click', () => {
+            step3.classList.remove('active-view');
+            container.classList.add('expanded');
+            setTimeout(() => {
+                step3.style.display = 'none';
+                renderSlots();
+                step2.style.display = 'block';
+                void step2.offsetWidth;
+                step2.classList.add('active-view');
+            }, 500);
+        });
+
+        // ── Init ──
+        loadSlots();
+        subscribeToLiveUpdates();
+    </script>
+</body>
+
+</html>
