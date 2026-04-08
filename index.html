@@ -784,8 +784,8 @@
 
         const gun = Gun({
             peers: RELAYS,
-            localStorage: true,   // Cache locally for offline resilience
-            radisk: false          // No server-side disk (client-only)
+            localStorage: false,   // Disable buggy internal storage to force network broadcast
+            radisk: false          // No server-side disk
         });
 
         const DB_ROOT = 'syncspace_v3';
@@ -912,6 +912,17 @@
                 });
             });
         }
+
+        // ── Fallback for local testing (file:// origins share localStorage) ──
+        window.addEventListener('storage', e => {
+            if (e.key === LOCAL_KEY && e.newValue) {
+                try {
+                    state.slots = JSON.parse(e.newValue);
+                    const onSlots = document.getElementById('step2').classList.contains('active-view');
+                    if (onSlots) renderSlots();
+                } catch(err) {}
+            }
+        });
 
         // ── Subscribe to live GUN updates (real-time across all devices) ──
         function subscribeToLiveUpdates() {
