@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SyncSpace - Premium Room Booking</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
         * {
@@ -1118,32 +1119,28 @@
             };
 
             // Write to GUN — broadcasts to every connected device
-            slotsRef.get('slot_' + slot.id).put(updatedSlot, ack => {
-                if (ack.err) {
-                    console.warn('GUN write error (local fallback):', ack.err);
-                    showToast('Relay write failed — saved locally, will sync when online.', 'warn');
-                }
+            // We update optimistically to ensure the UI NEVER freezes waiting for an ACK
+            slotsRef.get('slot_' + slot.id).put(updatedSlot);
 
-                const idx = state.slots.findIndex(s => s.id === slot.id);
-                if (idx !== -1) state.slots[idx] = updatedSlot;
-                localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
+            const idx = state.slots.findIndex(s => s.id === slot.id);
+            if (idx !== -1) state.slots[idx] = updatedSlot;
+            localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
 
-                document.getElementById('confirmName').textContent = state.user.name;
-                document.getElementById('confirmCompany').textContent = state.user.company;
-                document.getElementById('confirmTime').textContent = slot.time;
+            document.getElementById('confirmName').textContent = state.user.name;
+            document.getElementById('confirmCompany').textContent = state.user.company;
+            document.getElementById('confirmTime').textContent = slot.time;
 
-                loader.style.display = 'none';
-                step2.classList.remove('active-view');
-                container.classList.remove('expanded');
+            loader.style.display = 'none';
+            step2.classList.remove('active-view');
+            container.classList.remove('expanded');
 
-                setTimeout(() => {
-                    step2.style.display = 'none';
-                    step3.style.display = 'block';
-                    void step3.offsetWidth;
-                    step3.classList.add('active-view');
-                    showToast('Booking confirmed! 🎉', 'success');
-                }, 500);
-            });
+            setTimeout(() => {
+                step2.style.display = 'none';
+                step3.style.display = 'block';
+                void step3.offsetWidth;
+                step3.classList.add('active-view');
+                showToast('Booking confirmed! 🎉', 'success');
+            }, 500);
         }
 
         // ══════════════════════════════════════════════
