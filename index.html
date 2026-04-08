@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SyncSpace - Premium Room Booking</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- GUN.js loaded from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
         * {
@@ -107,6 +106,10 @@
 
         #syncBar.error #syncDot {
             background: #ef4444;
+        }
+
+        #syncBar.connected {
+            border-color: rgba(16, 185, 129, 0.2);
         }
 
         #syncLabel {
@@ -541,27 +544,14 @@
         }
 
         @keyframes pulse-green {
-            0% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2)
-            }
-
-            70% {
-                box-shadow: 0 0 0 20px rgba(16, 185, 129, 0)
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0)
-            }
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2) }
+            70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0) }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0) }
         }
 
         @keyframes scale-in {
-            0% {
-                transform: scale(0)
-            }
-
-            100% {
-                transform: scale(1)
-            }
+            0% { transform: scale(0) }
+            100% { transform: scale(1) }
         }
 
         .details-box {
@@ -636,9 +626,7 @@
         }
 
         @keyframes spin {
-            100% {
-                transform: rotate(360deg);
-            }
+            100% { transform: rotate(360deg); }
         }
 
         /* ── Retry banner ── */
@@ -663,7 +651,7 @@
 <body>
 
     <!-- Retry banner -->
-    <div id="retryBanner">⚠️ Peer relay unreachable — trying fallback relays… <span id="retryCount"></span></div>
+    <div id="retryBanner">⚠️ Peer relay unreachable — retrying… <span id="retryCount"></span></div>
 
     <!-- Sync status -->
     <div id="syncBar">
@@ -779,23 +767,51 @@
 
     <script>
         // ══════════════════════════════════════════════
-        //  GUN.js — 5 community relay peers with fallback
+        //  GUN.js — Working relay peers (verified alive)
+        //  relay.peer.ooo ✓ confirmed active
+        //
+        //  GUN is P2P: even with 1 relay, all browsers
+        //  connected to it form a mesh and sync in
+        //  real-time across any device worldwide.
         // ══════════════════════════════════════════════
+
         const RELAYS = [
-            'https://gun-manhattan.herokuapp.com/gun',
-            'https://gunjs.herokuapp.com/gun',
-            'https://peer.wallie.io/gun',
-            'https://relay.peer.ooo/gun',
-            'https://gun-us.herokuapp.com/gun'
+            'https://relay.peer.ooo/gun'
+            // Add your own relay URL here for redundancy:
+            // 'https://your-relay.koyeb.app/gun'
         ];
 
-        const gun = Gun({ peers: RELAYS, localStorage: true, radisk: false });
-        const slotsRef = gun.get('syncspace_v2').get('boardroom_alpha');
+        const gun = Gun({
+            peers: RELAYS,
+            localStorage: true,   // Cache locally for offline resilience
+            radisk: false          // No server-side disk (client-only)
+        });
 
-        // ── Relay health monitoring ──
-        let activeRelay = 'Connecting…';
-        let relayFailures = 0;
-        const MAX_RELAY_FAILURES = 3;
+        const DB_ROOT = 'syncspace_v3';
+        const slotsRef = gun.get(DB_ROOT).get('boardroom_alpha');
+
+        // ── Connection monitoring via GUN's built-in events ──
+        let isConnected = false;
+        let connectedRelay = null;
+
+        gun.on('hi', function (peer) {
+            isConnected = true;
+            connectedRelay = peer.url || peer.id || 'peer';
+            const short = String(connectedRelay).replace('https://', '').replace('/gun', '').substring(0, 30);
+            updateSyncUI('connected', 'Live Sync', short);
+            document.getElementById('retryBanner').style.display = 'none';
+            console.log('✅ Connected to relay:', connectedRelay);
+        });
+
+        gun.on('bye', function (peer) {
+            console.log('⚠️ Disconnected from relay:', peer.url || peer.id);
+            // Only show error if ALL peers are gone
+            setTimeout(() => {
+                if (!isConnected) {
+                    updateSyncUI('error', 'Reconnecting…', null);
+                }
+            }, 2000);
+        });
 
         function updateSyncUI(state, label, relay) {
             const bar = document.getElementById('syncBar');
@@ -803,44 +819,32 @@
             const badge = document.getElementById('relayBadge');
             bar.className = state;
             lbl.textContent = label;
-            if (relay) {
-                const short = relay.replace('https://', '').replace('/gun', '');
-                badge.textContent = '↔ ' + short;
-                activeRelay = short;
-            }
+            if (relay) badge.textContent = '↔ ' + relay;
         }
 
-        // Detect connectivity via a Gun heartbeat (any ack = connected)
-        function checkRelayConnectivity() {
-            const probe = gun.get('syncspace_heartbeat').get('ping');
-            const ts = Date.now();
+        // Periodic heartbeat check
+        function checkRelay() {
             let heard = false;
-
-            probe.put({ ts }, ack => {
+            gun.get('syncspace_heartbeat').get('ping').put({ ts: Date.now() }, ack => {
                 if (!heard) {
                     heard = true;
-                    relayFailures = 0;
-                    updateSyncUI('connected', 'Live', RELAYS[0]);
+                    isConnected = true;
+                    updateSyncUI('connected', 'Live Sync', connectedRelay ?
+                        String(connectedRelay).replace('https://', '').replace('/gun', '').substring(0, 30) : 'relay');
                     document.getElementById('retryBanner').style.display = 'none';
                 }
             });
-
             setTimeout(() => {
                 if (!heard) {
-                    relayFailures++;
-                    const remaining = RELAYS.length - relayFailures;
+                    isConnected = false;
                     updateSyncUI('error', 'Reconnecting…', null);
-                    if (relayFailures <= MAX_RELAY_FAILURES) {
-                        document.getElementById('retryBanner').style.display = 'block';
-                        document.getElementById('retryCount').textContent =
-                            `(trying relay ${relayFailures + 1}/${RELAYS.length})`;
-                    }
+                    document.getElementById('retryBanner').style.display = 'block';
+                    document.getElementById('retryCount').textContent = '(auto-retry active)';
                 }
-            }, 4000);
+            }, 5000);
         }
-
-        checkRelayConnectivity();
-        setInterval(checkRelayConnectivity, 15000);
+        setTimeout(checkRelay, 2000);
+        setInterval(checkRelay, 20000);
 
         // ══════════════════════════════════════════════
         //  Toast
@@ -875,9 +879,9 @@
         const state = { user: { name: '', email: '', company: '' }, slots: [] };
 
         // ── Local cache key ──
-        const LOCAL_KEY = 'syncspace_gun_slots';
+        const LOCAL_KEY = 'syncspace_gun_slots_v3';
 
-        // ── Load slots from GUN (with localStorage fallback) ──
+        // ── Load slots from GUN (with localStorage cache fallback) ──
         function loadSlots(callback) {
             const cached = localStorage.getItem(LOCAL_KEY);
             if (cached) {
@@ -887,7 +891,7 @@
             }
             if (callback) callback();
 
-            // Hydrate each slot node from GUN
+            // Hydrate from GUN
             DEFAULT_SLOTS.forEach(def => {
                 slotsRef.get('slot_' + def.id).once(data => {
                     if (data && data.id) {
@@ -908,25 +912,28 @@
             });
         }
 
-        // ── Subscribe to live GUN updates ──
+        // ── Subscribe to live GUN updates (real-time across all devices) ──
         function subscribeToLiveUpdates() {
             DEFAULT_SLOTS.forEach(def => {
                 slotsRef.get('slot_' + def.id).on(data => {
                     if (!data || !data.id) return;
                     const idx = state.slots.findIndex(s => s.id === data.id);
                     const updated = {
-                        id: data.id, time: data.time || def.time,
+                        id: data.id,
+                        time: data.time || def.time,
                         available: data.available !== undefined ? data.available : true,
-                        bookedBy: data.bookedBy || null, company: data.company || null
+                        bookedBy: data.bookedBy || null,
+                        company: data.company || null
                     };
                     if (idx !== -1) {
                         const was = state.slots[idx].available;
                         state.slots[idx] = updated;
-                        if (was && !updated.available) {
+                        if (was && !updated.available && updated.bookedBy !== 'System') {
                             showToast(`${updated.time} was just booked by ${updated.bookedBy}`, 'warn');
                         }
-                    } else { state.slots.push(updated); }
-
+                    } else {
+                        state.slots.push(updated);
+                    }
                     localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
                     const onSlots = document.getElementById('step2').classList.contains('active-view');
                     if (onSlots) renderSlots();
@@ -948,7 +955,7 @@
         });
 
         // ══════════════════════════════════════════════
-        //  Form validation helpers
+        //  Form validation
         // ══════════════════════════════════════════════
         function setFieldError(inputId, errId, show) {
             const inp = document.getElementById(inputId);
@@ -977,7 +984,6 @@
             return ok;
         }
 
-        // clear errors on input
         ['name', 'email', 'company'].forEach(id => {
             document.getElementById(id).addEventListener('input', () => {
                 const errMap = { name: 'nameErr', email: 'emailErr', company: 'companyErr' };
@@ -990,10 +996,7 @@
         // ══════════════════════════════════════════════
         document.getElementById('loginForm').addEventListener('submit', e => {
             e.preventDefault();
-            if (!validateForm()) {
-                showToast('Please fix the errors above.', 'error');
-                return;
-            }
+            if (!validateForm()) { showToast('Please fix the errors above.', 'error'); return; }
 
             loader.style.display = 'flex';
             setTimeout(() => {
@@ -1011,7 +1014,6 @@
 
                 loader.style.display = 'none';
                 step1.classList.remove('active-view');
-
                 setTimeout(() => {
                     step1.style.display = 'none';
                     otpView.style.display = 'block';
@@ -1041,8 +1043,6 @@
             if (entered === '1234') {
                 document.getElementById('otpError').style.display = 'none';
                 loader.style.display = 'flex';
-
-                // Load fresh slot data before showing grid
                 loadSlots(() => {
                     setTimeout(() => {
                         loader.style.display = 'none';
@@ -1097,10 +1097,9 @@
         }
 
         // ══════════════════════════════════════════════
-        //  Book a slot — writes to GUN (all peers sync)
+        //  Book a slot — writes to GUN (syncs to all devices)
         // ══════════════════════════════════════════════
         function handleBooking(slot) {
-            // Optimistic check
             const fresh = state.slots.find(s => s.id === slot.id);
             if (!fresh || !fresh.available) {
                 showToast('This slot was just taken! Please pick another.', 'warn');
@@ -1118,14 +1117,13 @@
                 company: state.user.company
             };
 
-            // Write to GUN — all connected peers (phones, tablets, dashboard) receive this
+            // Write to GUN — broadcasts to every connected device
             slotsRef.get('slot_' + slot.id).put(updatedSlot, ack => {
                 if (ack.err) {
-                    // Gracefully fall back: still update local state and localStorage
-                    console.warn('GUN write error (using local fallback):', ack.err);
-                    showToast('Relay write failed — saved locally and will sync when back online.', 'warn');
+                    console.warn('GUN write error (local fallback):', ack.err);
+                    showToast('Relay write failed — saved locally, will sync when online.', 'warn');
                 }
-                // Update local state regardless
+
                 const idx = state.slots.findIndex(s => s.id === slot.id);
                 if (idx !== -1) state.slots[idx] = updatedSlot;
                 localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
@@ -1166,6 +1164,7 @@
         // ── Init ──
         loadSlots();
         subscribeToLiveUpdates();
+        console.log('SyncSpace Booking — GUN P2P via relay.peer.ooo');
     </script>
 </body>
 
