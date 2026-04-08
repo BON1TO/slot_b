@@ -7,7 +7,7 @@
     <title>SyncSpace - Premium Room Booking</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -784,59 +784,32 @@
 
     <script>
         // ══════════════════════════════════════════════
-        //  GUN.js — Working relay peers (verified alive)
-        //  relay.peer.ooo ✓ confirmed active
-        //
-        //  GUN is P2P: even with 1 relay, all browsers
-        //  connected to it form a mesh and sync in
-        //  real-time across any device worldwide.
+        //  MQTT WSS — Enterprise-grade public broker
+        //  Handles cross-device real-time sync flawlessly.
         // ══════════════════════════════════════════════
 
-        const RELAYS = [
-            'https://relay.peer.ooo/gun'
-            // Add your own relay URL here for redundancy:
-            // 'https://your-relay.koyeb.app/gun'
-        ];
+        const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+        const MQTT_TOPIC_PREFIX = 'syncspace_v3/boardroom_alpha/slot_';
+        
+        const client = mqtt.connect(MQTT_BROKER);
 
-        const gun = Gun({
-            peers: RELAYS,
-            localStorage: false,   // Disable buggy internal storage to force network broadcast
-            radisk: false          // No server-side disk
+        client.on('connect', () => {
+            updateSyncUI('connected', 'Live Sync', 'EMQX Broker');
+            console.log('✅ Connected to MQTT relay');
         });
 
-        const DB_ROOT = 'syncspace_v3';
-        const slotsRef = gun.get(DB_ROOT).get('boardroom_alpha');
-
-        // ── Connection monitoring via GUN's built-in events ──
-        let isConnected = false;
-        let connectedRelay = null;
-
-        gun.on('hi', function (peer) {
-            isConnected = true;
-            connectedRelay = peer.url || peer.id || 'peer';
-            const short = String(connectedRelay).replace('https://', '').replace('/gun', '').substring(0, 30);
-            updateSyncUI('connected', 'Live Sync', short);
-            document.getElementById('retryBanner').style.display = 'none';
-            console.log('✅ Connected to relay:', connectedRelay);
-        });
-
-        gun.on('bye', function (peer) {
-            console.log('⚠️ Disconnected from relay:', peer.url || peer.id);
-            // Only show error if ALL peers are gone
-            setTimeout(() => {
-                if (!isConnected) {
-                    updateSyncUI('error', 'Reconnecting…', null);
-                }
-            }, 2000);
+        client.on('offline', () => {
+            console.warn('⚠️ Disconnected from MQTT relay');
+            updateSyncUI('error', 'Reconnecting…', null);
         });
 
         function updateSyncUI(state, label, relay) {
             const bar = document.getElementById('syncBar');
             const lbl = document.getElementById('syncLabel');
             const badge = document.getElementById('relayBadge');
-            bar.className = state;
-            lbl.textContent = label;
-            if (relay) badge.textContent = '↔ ' + relay;
+            if (bar) bar.className = state;
+            if (lbl) lbl.textContent = label;
+            if (relay && badge) badge.textContent = '↔ ' + relay;
         }
 
 
@@ -918,19 +891,26 @@
             }
         });
 
-        // ── Subscribe to live GUN updates (real-time across all devices) ──
+        // ── Subscribe to live MQTT updates (real-time across all devices) ──
         function subscribeToLiveUpdates() {
-            DEFAULT_SLOTS.forEach(def => {
-                slotsRef.get('slot_' + def.id).on(data => {
+            client.subscribe(MQTT_TOPIC_PREFIX + '+', { qos: 1 }, (err) => {
+                if (err) console.error('Subscription error:', err);
+            });
+
+            client.on('message', (topic, payload) => {
+                try {
+                    const data = JSON.parse(payload.toString());
                     if (!data || !data.id) return;
+                    
                     const idx = state.slots.findIndex(s => s.id === data.id);
                     const updated = {
                         id: data.id,
-                        time: data.time || def.time,
+                        time: data.time,
                         available: data.available !== undefined ? data.available : true,
                         bookedBy: data.bookedBy || null,
                         company: data.company || null
                     };
+                    
                     if (idx !== -1) {
                         const was = state.slots[idx].available;
                         state.slots[idx] = updated;
@@ -943,7 +923,9 @@
                     localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
                     const onSlots = document.getElementById('step2').classList.contains('active-view');
                     if (onSlots) renderSlots();
-                });
+                } catch (e) {
+                    console.error('MQTT parse error:', e);
+                }
             });
         }
 
@@ -1125,9 +1107,9 @@
                 company: state.user.company
             };
 
-            // Write to GUN — broadcasts to every connected device
-            // We update optimistically to ensure the UI NEVER freezes waiting for an ACK
-            slotsRef.get('slot_' + slot.id).put(updatedSlot);
+            // Publish to MQTT — broadcasts to every connected device instantly
+            // { retain: true } acts as our zero-config database
+            client.publish(MQTT_TOPIC_PREFIX + slot.id, JSON.stringify(updatedSlot), { retain: true });
 
             const idx = state.slots.findIndex(s => s.id === slot.id);
             if (idx !== -1) state.slots[idx] = updatedSlot;
