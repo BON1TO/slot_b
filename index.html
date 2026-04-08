@@ -789,7 +789,7 @@
         // ══════════════════════════════════════════════
 
         const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
-        const MQTT_TOPIC_PREFIX = 'syncspace_v3/boardroom_alpha/slot_';
+        const MQTT_TOPIC_PREFIX = 'syncspace_v3/boardroom_alpha/';
         
         const client = mqtt.connect(MQTT_BROKER);
 
@@ -849,7 +849,7 @@
         // ── Local cache key ──
         const LOCAL_KEY = 'syncspace_gun_slots_v3';
 
-        // ── Load slots from GUN (with localStorage cache fallback) ──
+        // ── Load slots from cache ──
         function loadSlots(callback) {
             const cached = localStorage.getItem(LOCAL_KEY);
             if (cached) {
@@ -858,26 +858,6 @@
                 state.slots = [...DEFAULT_SLOTS];
             }
             if (callback) callback();
-
-            // Hydrate from GUN
-            DEFAULT_SLOTS.forEach(def => {
-                slotsRef.get('slot_' + def.id).once(data => {
-                    if (data && data.id) {
-                        const idx = state.slots.findIndex(s => s.id === data.id);
-                        const merged = {
-                            id: data.id,
-                            time: data.time || def.time,
-                            available: data.available !== undefined ? data.available : def.available,
-                            bookedBy: data.bookedBy || null,
-                            company: data.company || null
-                        };
-                        if (idx !== -1) state.slots[idx] = merged;
-                        else state.slots.push(merged);
-                        localStorage.setItem(LOCAL_KEY, JSON.stringify(state.slots));
-                        renderSlots();
-                    }
-                });
-            });
         }
 
         // ── Fallback for local testing (file:// origins share localStorage) ──
